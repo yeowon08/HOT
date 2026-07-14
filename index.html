@@ -1,0 +1,366 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>🌡️ 폭염·온열질환 분석 대시보드</title>
+
+<style>
+*{
+margin:0;
+padding:0;
+box-sizing:border-box;
+font-family:'Malgun Gothic',sans-serif;
+}
+
+body{
+background:linear-gradient(135deg,#FFE5EC,#FFF1C1,#DFFFE0,#DDEBFF,#EAD7FF);
+min-height:100vh;
+padding:20px;
+}
+
+.container{
+max-width:1200px;
+margin:auto;
+}
+
+h1{
+text-align:center;
+margin-bottom:8px;
+color:#444;
+}
+
+.subtitle{
+text-align:center;
+color:#888;
+font-size:13px;
+margin-bottom:25px;
+}
+
+.selector{
+text-align:center;
+margin-bottom:25px;
+}
+
+select{
+padding:12px 20px;
+font-size:18px;
+border:none;
+border-radius:15px;
+background:white;
+box-shadow:0 3px 10px rgba(0,0,0,0.1);
+cursor:pointer;
+}
+
+.cards{
+display:grid;
+grid-template-columns:repeat(auto-fit,minmax(200px,1fr));
+gap:20px;
+margin-bottom:25px;
+}
+
+.card{
+background:white;
+padding:25px;
+border-radius:20px;
+text-align:center;
+box-shadow:0 5px 15px rgba(0,0,0,0.08);
+}
+
+.value{
+font-size:30px;
+font-weight:bold;
+color:#ff69b4;
+}
+
+.value.warn{
+color:#ff5a36;
+}
+
+.card .sub{
+font-size:12px;
+color:#aaa;
+margin-top:4px;
+}
+
+.graph-row{
+display:grid;
+grid-template-columns:1fr 1fr;
+gap:20px;
+margin-bottom:20px;
+}
+
+@media (max-width:800px){
+.graph-row{ grid-template-columns:1fr; }
+}
+
+.graph-box,
+.analysis{
+background:white;
+padding:20px;
+border-radius:20px;
+box-shadow:0 5px 15px rgba(0,0,0,0.08);
+margin-bottom:20px;
+}
+
+.graph-title{
+text-align:center;
+font-size:20px;
+margin-bottom:10px;
+}
+
+svg{
+width:100%;
+height:320px;
+}
+
+.point{
+fill:#ff69b4;
+}
+
+.line{
+stroke:#ff69b4;
+stroke-width:4;
+fill:none;
+}
+
+.bar{
+fill:#ff8a5c;
+}
+
+.axis{
+stroke:#555;
+stroke-width:2;
+}
+
+.analysis{
+line-height:1.8;
+}
+
+.source-note{
+font-size:12px;
+color:#999;
+text-align:center;
+margin-top:8px;
+}
+
+footer{
+text-align:center;
+font-size:12px;
+color:#999;
+margin-top:10px;
+line-height:1.6;
+}
+</style>
+
+</head>
+
+<body>
+
+<div class="container">
+
+<h1>🌡️ 폭염·온열질환 분석 대시보드 📈</h1>
+<div class="subtitle">기온 추이(참고용 예시값) × 온열질환자 수(실측 데이터, 2020~2024)</div>
+
+<div class="selector">
+📍 지역 선택 :
+<select id="regionSelect"></select>
+</div>
+
+<div class="cards">
+
+<div class="card">
+<h2>🌡️ 평균 최고기온</h2>
+<div class="value" id="highTemp"></div>
+</div>
+
+<div class="card">
+<h2>🌙 평균 최저기온</h2>
+<div class="value" id="lowTemp"></div>
+</div>
+
+<div class="card">
+<h2>☀️ 평균기온</h2>
+<div class="value" id="avgTemp"></div>
+</div>
+
+<div class="card">
+<h2>🏥 온열질환자 수(2024)</h2>
+<div class="value warn" id="patients2024"></div>
+<div class="sub" id="patientsDelta"></div>
+</div>
+
+</div>
+
+<div class="graph-row">
+
+<div class="graph-box">
+<div class="graph-title">📈 여름 평균기온 추이</div>
+<svg id="graph"></svg>
+</div>
+
+<div class="graph-box">
+<div class="graph-title">🏥 연도별 온열질환자 수</div>
+<svg id="graphPatients"></svg>
+<div class="source-note" id="sourceNote"></div>
+</div>
+
+</div>
+
+<div class="analysis">
+<h3>🔍 분석 결과</h3>
+<p id="analysisText"></p>
+</div>
+
+<footer>
+※ 기온 데이터는 예시(참고)값이며, 온열질환자 수는 실제 공공데이터를 집계한 값입니다.<br>
+서울·부산·대구·인천·대전·울산: 질병관리청 온열질환 응급실감시체계 신고건수(발생시도 기준) / 수원·양평·전주·거제: 국민건강보험공단 시군구별 실제 진료인원 합산<br>
+두 통계는 산출 방식(신고 기반 vs 진료 기반)이 달라 지역 간 절대값을 직접 비교하기보다 각 지역의 연도별 증가 추세를 보는 용도로 활용하시길 권장합니다. 건강보험공단 자료 중 소수(5명 미만) 마스킹(*) 구간은 근사값(2명)으로 처리했습니다.
+</footer>
+
+</div>
+
+<script>
+
+const years=["2020","2021","2022","2023","2024"];
+
+const climateData = {
+
+서울:{high:31.2,low:23.6,avg:27.4,yearly:[25.1,25.4,25.8,26.2,26.6],patients:[40,125,116,209,241],source:"kcdc"},
+부산:{high:29.8,low:24.3,avg:27.0,yearly:[24.8,25.0,25.2,25.5,25.8],patients:[55,48,54,96,132],source:"kcdc"},
+대구:{high:33.1,low:24.1,avg:28.6,yearly:[26.0,26.3,26.7,27.1,27.6],patients:[26,32,32,61,69],source:"kcdc"},
+인천:{high:29.4,low:23.1,avg:26.2,yearly:[24.0,24.2,24.6,25.0,25.4],patients:[29,99,77,121,208],source:"kcdc"},
+대전:{high:31.8,low:23.5,avg:27.6,yearly:[25.0,25.3,25.7,26.1,26.5],patients:[19,30,25,43,72],source:"kcdc"},
+울산:{high:30.5,low:24.0,avg:27.2,yearly:[24.7,25.0,25.4,25.8,26.1],patients:[26,32,26,70,114],source:"kcdc"},
+수원:{high:31.1,low:23.4,avg:27.0,yearly:[24.9,25.2,25.5,25.9,26.3],patients:[65,176,180,312,351],source:"kbi"},
+양평:{high:29.9,low:22.1,avg:26.0,yearly:[23.8,24.1,24.5,24.9,25.3],patients:[8,11,23,24,35],source:"kbi"},
+전주:{high:32.0,low:23.8,avg:27.9,yearly:[25.4,25.8,26.1,26.5,27.0],patients:[117,136,138,262,332],source:"kbi"},
+거제:{high:29.5,low:24.5,avg:27.0,yearly:[24.6,24.9,25.2,25.6,26.0],patients:[50,63,100,177,252],source:"kbi"}
+
+};
+
+const sourceLabel = {
+  kcdc: "출처: 질병관리청 온열질환 감시데이터(발생시도 기준 신고건수)",
+  kbi: "출처: 국민건강보험공단 시군구별 온열질환자 수(실제 진료인원 합산)"
+};
+
+const select=document.getElementById("regionSelect");
+
+for(const region in climateData){
+const option=document.createElement("option");
+option.value=region;
+option.textContent=region;
+select.appendChild(option);
+}
+
+function drawLineGraph(data){
+
+const svg=document.getElementById("graph");
+svg.innerHTML="";
+
+const width=800;
+const height=280;
+
+svg.setAttribute("viewBox",`0 0 ${width} ${height}`);
+
+const min=Math.min(...data)-1;
+const max=Math.max(...data)+1;
+
+let points="";
+
+data.forEach((temp,index)=>{
+
+const x=70+(index*160);
+const y=height-40-((temp-min)/(max-min))*200;
+
+points+=`${x},${y} `;
+
+svg.innerHTML+=`
+<circle class="point" cx="${x}" cy="${y}" r="6"></circle>
+<text x="${x-15}" y="${height-10}" font-size="12">${years[index]}</text>
+<text x="${x-10}" y="${y-12}" font-size="12">${temp}℃</text>
+`;
+
+});
+
+svg.innerHTML+=`
+<line class="axis" x1="50" y1="20" x2="50" y2="${height-30}"></line>
+<line class="axis" x1="50" y1="${height-30}" x2="${width-20}" y2="${height-30}"></line>
+<polyline class="line" points="${points}"></polyline>
+`;
+
+}
+
+function drawBarGraph(data){
+
+const svg=document.getElementById("graphPatients");
+svg.innerHTML="";
+
+const width=800;
+const height=280;
+
+svg.setAttribute("viewBox",`0 0 ${width} ${height}`);
+
+const max=Math.max(...data)*1.15;
+const barWidth=70;
+
+data.forEach((val,index)=>{
+
+const x=90+(index*150);
+const barHeight=((val/max)*200);
+const y=height-30-barHeight;
+
+svg.innerHTML+=`
+<rect class="bar" x="${x}" y="${y}" width="${barWidth}" height="${barHeight}" rx="6"></rect>
+<text x="${x+barWidth/2}" y="${y-8}" font-size="13" text-anchor="middle">${val}명</text>
+<text x="${x+barWidth/2}" y="${height-10}" font-size="12" text-anchor="middle">${years[index]}</text>
+`;
+
+});
+
+svg.innerHTML+=`
+<line class="axis" x1="50" y1="20" x2="50" y2="${height-30}"></line>
+<line class="axis" x1="50" y1="${height-30}" x2="${width-20}" y2="${height-30}"></line>
+`;
+
+}
+
+function updateData(region){
+
+const data=climateData[region];
+
+document.getElementById("highTemp").innerText=data.high+"℃";
+document.getElementById("lowTemp").innerText=data.low+"℃";
+document.getElementById("avgTemp").innerText=data.avg+"℃";
+
+const last=data.patients[data.patients.length-1];
+const prev=data.patients[data.patients.length-2];
+const deltaPct=(((last-prev)/prev)*100).toFixed(0);
+
+document.getElementById("patients2024").innerText=last+"명";
+document.getElementById("patientsDelta").innerText=
+  (deltaPct>=0?"전년比 +":"전년比 ")+deltaPct+"%";
+
+drawLineGraph(data.yearly);
+drawBarGraph(data.patients);
+
+document.getElementById("sourceNote").innerText = sourceLabel[data.source];
+
+const tempIncrease=(data.yearly[4]-data.yearly[0]).toFixed(1);
+const patientMultiple=(data.patients[4]/data.patients[0]).toFixed(1);
+
+document.getElementById("analysisText").innerHTML=
+`${region}의 여름 평균기온은 2020년부터 2024년까지 약 <b>${tempIncrease}℃</b> 상승했고, 같은 기간 온열질환자 수는 ${data.patients[0]}명에서 ${data.patients[4]}명으로 약 <b>${patientMultiple}배</b> 증가했습니다. 기온 상승 폭에 비해 환자 수 증가폭이 훨씬 가파른 지역은 폭염일수 증가, 고령 인구 비중, 실외 작업·농업 종사자 비중 등 지역 특성이 함께 작용했을 가능성이 있습니다. (${sourceLabel[data.source]})`;
+
+}
+
+select.addEventListener("change",function(){
+updateData(this.value);
+});
+
+updateData("서울");
+
+</script>
+
+</body>
+</html>
